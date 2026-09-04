@@ -1,6 +1,8 @@
 # 后端配置文件（JSON），通过 ConfigMap 挂载进 controller/node 容器。
 # 对接新存储系统时，这里放该系统的静态默认参数。
 # 注意：只放非敏感配置；认证信息应走 Secret + StorageClass secret 引用。
+# TODO: server/share 改成你的真实 NFS 地址；kind 本地验证可先部署
+# deploy/test/nfs-server.yaml 并把 server 填为其 Service ClusterIP。
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,7 +11,7 @@ metadata:
 data:
   config.json: |
     {
-      "server": "10.96.90.138",
+      "server": "192.168.1.10",
       "share": "/",
       "archiveOnDelete": "true",
       "mountOptions": "nolock"

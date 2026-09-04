@@ -7,7 +7,7 @@ metadata:
 provisioner: scaffold.csi.example.com # 必须与 --drivername 完全一致
 parameters:
   # 可在 PVC 维度覆盖 backend-config 中的默认 server/share
-  server: "10.96.90.138"
+  server: "192.168.1.10" # TODO: 改成你的 NFS 地址
   share: "/"
 reclaimPolicy: Delete           # Delete=PV 释放时调 DeleteVolume；Retain=保留数据
 volumeBindingMode: Immediate    # 文件存储无需等调度结果，立即供应
