@@ -1,0 +1,37 @@
+# 第二个 Pod 挂载同一个 PVC，验证 RWX（多 Pod 共享读写）：
+# writer 每 10 秒写入一次时间戳，reader 持续读出来。
+# 注意：RWX 共享依赖 CSI 卷本身支持多节点/多 pod 挂载，nfs 类天然支持。
+apiVersion: v1
+kind: Pod
+metadata:
+  name: csi-scaffold-writer
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "while true; do date >> /data/shared.log; sleep 10; done"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: csi-scaffold-pvc
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: csi-scaffold-reader
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep 3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+          readOnly: true # pod 级只读，验证挂载权限控制
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: csi-scaffold-pvc

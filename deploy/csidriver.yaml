@@ -1,0 +1,23 @@
+# CSIDriver 对象：向 k8s 声明这个 driver 的存在与行为特征。
+# 它本身不运行任何代码，但 provisioner/kubelet 会读取它来决定如何对接。
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: scaffold.csi.example.com   # 必须与 --drivername、StorageClass.provisioner 一致
+spec:
+  # attachRequired: false 表示不需要 ControllerPublish/Unpublish（attach 阶段）。
+  # nfs 类文件存储无需 attach，provisioner 直接生成 PV，kubelet 直接 NodePublish。
+  # 块存储（云盘/iSCSI）通常为 true，此时需要部署 external-attacher。
+  attachRequired: false
+  # podInfoOnMount: 挂载时把 pod 名字/namespace/uid 注入 NodePublishVolumeRequest.volume_context，
+  # 需要感知 pod 身份的后端（如 secrets-store）才开启。
+  podInfoOnMount: false
+  # fsGroupPolicy: ReadWriteOnceWithFSType 表示仅对 RWO+文件系统卷应用 fsGroup。
+  fsGroupPolicy: ReadWriteOnceWithFSType
+  # storageCapacity: true 让 provisioner 上报 CSIStorageCapacity 供调度器使用，
+  # 脚手架未实现 GetCapacity，保持 false。
+  storageCapacity: false
+  # volumeLifecycleModes: 声明支持持久卷（Persistent）。若支持 ephemeral
+  # inline volume（CSI 临时卷）需追加 Ephemeral。
+  volumeLifecycleModes:
+    - Persistent

@@ -1,0 +1,123 @@
+# Node 平面：DaemonSet，每台工作节点一个 Pod，负责「把卷挂到 pod 里」。
+#
+# 与 controller 的关键差异（面试高频考点）：
+#   1. privileged: true —— mount(2) 需要 CAP_SYS_ADMIN；
+#   2. mountPropagation: Bidirectional —— 容器内的挂载必须传播到宿主机，
+#      否则 kubelet 和业务 pod 看不到挂载点（最常见的部署事故）；
+#   3. hostNetwork: true —— 让 nfs 等网络存储走宿主机网络栈（可选但推荐）；
+#   4. 挂载宿主机 /var/lib/kubelet —— kubelet 传入的 target path 是宿主机路径，
+#      容器内必须能看到同一视图。
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: csi-scaffold-node
+  namespace: csi-scaffold
+  labels:
+    app: csi-scaffold-node
+spec:
+  selector:
+    matchLabels:
+      app: csi-scaffold-node
+  template:
+    metadata:
+      labels:
+        app: csi-scaffold-node
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        # node-driver-registrar：通过宿主机 kubelet 的插件注册 socket
+        # （/var/lib/kubelet/plugins_registry/）把本 driver 注册给 kubelet，
+        # 同时调用 NodeGetInfo 把 nodeID 写入 CSINode 对象。
+        - name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+          args:
+            - --csi-address=$(ADDRESS)
+            - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+            - --v=2
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: /var/lib/kubelet/plugins/scaffold.csi.example.com/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+          resources:
+            requests:
+              cpu: 10m
+              memory: 20Mi
+        - name: livenessprobe
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
+          args:
+            - --csi-address=/csi/csi.sock
+            - --health-port=9809
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-scaffold
+          image: registry.example.com/library/csi-scaffold:v0.1.0 # make deploy 会替换
+          args:
+            - --drivername=scaffold.csi.example.com
+            - --endpoint=unix:///csi/csi.sock
+            - --nodeid=$(NODE_ID)
+            - --backend=nfs
+            - --backend-config=/etc/csi-backend/config.json
+            - --v=4
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName # 用真实节点名，写入 CSINode
+          ports:
+            - name: healthz
+              containerPort: 9809
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            privileged: true # mount/umount 必需
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            - name: backend-config
+              mountPath: /etc/csi-backend
+              readOnly: true
+            # pod 卷的挂载点目录：NodePublish 的 target path 都在这里
+            - name: pods-mount-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: Bidirectional
+            # 块设备类 driver 还需要 /dev；文件存储不需要
+          resources:
+            requests:
+              cpu: 10m
+              memory: 60Mi
+      volumes:
+        # socket-dir 直接就是宿主机 kubelet 插件目录（挂载到容器 /csi），
+        # 这样 driver 创建的 csi.sock 天然落在 kubelet 能 dial 到的宿主机路径上，
+        # 同时 registrar/livenessprobe 通过 /csi 访问同一个 socket。
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/scaffold.csi.example.com
+            type: DirectoryOrCreate
+        - name: backend-config
+          configMap:
+            name: csi-scaffold-backend-config
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+        - name: pods-mount-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory

@@ -1,0 +1,17 @@
+# StorageClass 是把「存储系统参数」与「driver」绑定的用户入口。
+# parameters 会原样传入 CreateVolumeRequest.parameters → backend.ProvisionRequest.Parameters。
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-scaffold-nfs
+provisioner: scaffold.csi.example.com # 必须与 --drivername 完全一致
+parameters:
+  # 可在 PVC 维度覆盖 backend-config 中的默认 server/share
+  server: "10.96.90.138"
+  share: "/"
+reclaimPolicy: Delete           # Delete=PV 释放时调 DeleteVolume；Retain=保留数据
+volumeBindingMode: Immediate    # 文件存储无需等调度结果，立即供应
+allowVolumeExpansion: true      # 对应 backend.Expander 可选接口
+mountOptions:
+  - hard
+  - nolock

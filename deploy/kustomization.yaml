@@ -1,0 +1,21 @@
+# kustomize 入口：一个命令部署全部清单，自动处理资源排序与镜像替换。
+# 用法：
+#   kubectl apply -k deploy/                    # 部署
+#   kustomize edit set image ...（make deploy 已封装）
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: csi-scaffold
+
+resources:
+- rbac.yaml
+- csidriver.yaml
+- backend-config.yaml
+- controller.yaml
+- node.yaml
+
+# make deploy 通过 kustomize edit set image 修改这里的 newTag/newName。
+images:
+- name: registry.example.com/library/csi-scaffold
+  newName: local/csi-scaffold
+  newTag: v0.2.0

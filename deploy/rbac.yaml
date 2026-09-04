@@ -1,0 +1,115 @@
+# RBAC：controller 侧 sidecar（provisioner/resizer）需要操作 PV/PVC/StorageClass。
+# node 侧的 registrar 走 kubelet 插件注册机制，不需要 apiserver 权限。
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-scaffold-controller-sa
+  namespace: csi-scaffold
+---
+# external-provisioner 标准权限
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: csi-scaffold-provisioner-role
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csidrivers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: csi-scaffold-provisioner-binding
+subjects:
+  - kind: ServiceAccount
+    name: csi-scaffold-controller-sa
+    namespace: csi-scaffold
+roleRef:
+  kind: ClusterRole
+  name: csi-scaffold-provisioner-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# external-resizer 标准权限
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: csi-scaffold-resizer-role
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: csi-scaffold-resizer-binding
+subjects:
+  - kind: ServiceAccount
+    name: csi-scaffold-controller-sa
+    namespace: csi-scaffold
+roleRef:
+  kind: ClusterRole
+  name: csi-scaffold-resizer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# leader 选举权限（provisioner/resizer 多副本时选主用，单副本也要求存在）
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: csi-scaffold-leader-election-role
+  namespace: csi-scaffold
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: csi-scaffold-leader-election-binding
+  namespace: csi-scaffold
+subjects:
+  - kind: ServiceAccount
+    name: csi-scaffold-controller-sa
+    namespace: csi-scaffold
+roleRef:
+  kind: Role
+  name: csi-scaffold-leader-election-role
+  apiGroup: rbac.authorization.k8s.io

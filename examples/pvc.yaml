@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: csi-scaffold-pvc
+spec:
+  accessModes:
+    - ReadWriteMany # nfs 类文件存储支持多节点共享
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: csi-scaffold-nfs
